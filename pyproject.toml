@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "notein2pdf"
+version = "0.1.0"
+description = "Convert Notein notes (native .in exports and cloud-sync files) into layered vector PDFs"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["pymupdf>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "numpy", "pillow"]
+
+[project.scripts]
+notein2pdf = "notein2pdf.converter:main"
+notein2pdf-batch = "notein2pdf.batch:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

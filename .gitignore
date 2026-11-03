@@ -1,0 +1,44 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Personal data: never commit notes, their conversions, or fixtures ---
+/output/
+tests/fixtures/*
+!tests/fixtures/.gitkeep
+!tests/fixtures/README.md
+*.in
+*.mp3
+*.m4a
+.notein_state*.json
+# unzipped exports / cloud-sync dumps
+NoteInDataSync/
+drive_zip/
+drive_cache/
+
+# generated PDFs and scratch renders (docs/ may contain hand-made figures as png/svg)
+*.pdf
+/scratch/
+/tmp/
+
+# --- Secrets / credentials (rclone, OAuth, Google) ---
+rclone.conf
+*.token
+client_secret*.json
+credentials*.json
+.env
+
+# --- Editors / OS ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

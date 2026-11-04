@@ -33,7 +33,7 @@ DEFAULT_CONFIG = {
     "poll_seconds": 60,
     "embed_source": True,                 # attach the original .in to each PDF (see provenance.py)
     "notify_progress_seconds": 15,        # desktop notification update interval during a cycle (0 = summary only)
-    "backup_dir": "notein2pdf-backups",   # Nextcloud path: pre-overwrite file versions kept here, dated per run
+    "backup_dir": None,                   # e.g. "notein2pdf-backups": pre-overwrite file versions kept there, dated per run
                                            # (set to null/empty to disable, relying only on Nextcloud's own
                                            # version history instead)
 }

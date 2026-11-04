@@ -65,15 +65,12 @@ journalctl --user -u notein2pdf-sync -f   # watch it
   written to the Drive remote.
 - Nextcloud deletes use `rclone deletefile`, which on a Nextcloud WebDAV backend moves the file to
   Nextcloud's own trash (recoverable in the web UI), not a hard delete.
-- **Overwrites get an explicit backup, not just Nextcloud's version history.** A note's target
-  filename can already exist in Nextcloud before it's ever been synced by this tool (e.g. you'd
-  independently placed the same-titled file there, or merged it in from elsewhere) - the mapped
-  `nextcloud_path` folders aren't exclusively owned by this service. Every real (non-dry-run) cycle
-  that overwrites a file first copies the about-to-be-replaced version into
-  `<nextcloud_remote>:<backup_dir>/<run timestamp>/<same relative path>` via rclone's `--backup-dir`
-  (the backup path includes the file's own folder, so structure is kept; a no-op when there's
-  nothing to overwrite). Set `backup_dir` to `null` to rely only on Nextcloud's own version history
-  instead.
+- **Overwrites rely on Nextcloud's version history by default.** A note's target filename can already
+  exist in Nextcloud before it's synced by this tool, and the mapped folders aren't exclusively owned by
+  this service. Optionally set `backup_dir` (e.g. `"notein2pdf-backups"`) and every real cycle that
+  overwrites a file first copies the about-to-be-replaced version into
+  `<nextcloud_remote>:<backup_dir>/<run timestamp>/<same relative path>` via rclone's `--backup-dir`.
+  Off by default (`null`).
 - `--dry-run` runs the full plan and prints every action without touching Nextcloud or writing state,
   so you can preview before the first real run or after changing `mappings`.
 - State is one small JSON file; delete it to force a full re-sync (re-converts and re-uploads

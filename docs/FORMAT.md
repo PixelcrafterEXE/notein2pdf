@@ -37,3 +37,13 @@ Folders are separate zips containing `folder_<title>` (JSON: `id`, `title`, `par
 - Dotted paper: step = (width − left − right padding)/30 (39 px on A4), first column at the left padding,
   first row half a step below the top padding. Infinite-canvas grid step = `requiredItemSpace` (37.5 px).
 - Hidden layers are not exported by the app.
+
+## Structure of an imported-PDF note (what `pdf2notein` generates)
+- DB: WAL mode, page size 4096, `user_version` 31, Room `identity_hash c7edc3e9…` (all from `data/schema_v31.json`).
+- `NoteContentEntity`: one row; `page_list` = the PDF pages' ids in order; `page_layer_list` = `["paper_theme","default"]`;
+  `default_page_id` = a hidden blank A4 page (`PageEntity.source = 0`).
+- `PageEntity` (`source = 2`): `paper_spec` width 1240, height floor(1240·h/w) (±1 px vs the app on some pages), name `PDF`;
+  `paper_theme` = `PdfPaperTheme` with `pageNum` and `pdfInfo`. Deleted pages keep their PDF page; they are just absent from `page_list`.
+- `PdfInfoEntity` (id, `pdf_path` = `/data/user/0/…/files/documents/<title>_notein_pdf_<uuid>.pdf`, `password`), two `PageLayerEntity` rows.
+- Zip members (fixed 1980-01-01 timestamps, deflate): DB, `note_extra.json`, `note_in_flag.json`, `note_label.json`,
+  `note_meta.json`, `note_pdf_<name>.pdf`, empty `notepdf_lost_info.json`.

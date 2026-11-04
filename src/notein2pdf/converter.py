@@ -1,6 +1,7 @@
 """Convert a Notein native export (.in) into a PDF.
 
-Usage: notein2pdf input.in output.pdf   (or: python -m notein2pdf input.in output.pdf)
+Usage: notein2pdf input.in output.pdf [--no-embed]   (or: python -m notein2pdf input.in output.pdf)
+--no-embed: do not attach the original .in to the PDF (smaller file, but not reversible by pdf2notein)
 Requires: pymupdf (pip install pymupdf)
 
 The .in file is a zip holding an SQLite (Room) database, the original PDF (for
@@ -9,6 +10,8 @@ of the original PDF page or a generated paper background.
 """
 import json, os, shutil, sqlite3, sys, tempfile, zipfile
 import pymupdf as fitz
+
+from . import provenance
 
 PX_TO_PT = 72 / 150          # Notein pages are 1240 px wide = A4 at 150 dpi
 warnings = []
@@ -459,7 +462,7 @@ def export_audio(con, tmp, dst):
     return written
 
 
-def convert(src, dst):
+def convert(src, dst, embed_source=True):
     global _OX, _OY, _OC
     tmp = tempfile.mkdtemp(prefix="notein2pdf_")
     try:
@@ -601,6 +604,8 @@ def convert(src, dst):
             add_page_annotations(con, page, pid, scale)
         add_outline(con, out, page_ids)
         out.set_metadata({"title": meta.get("title", ""), "producer": "notein2pdf"})
+        if embed_source:                      # makes the conversion exactly reversible (see provenance.py)
+            provenance.embed_source(out, src, meta)
         out.save(dst, garbage=3, deflate=True)
         for a in export_audio(con, tmp, dst):
             print("audio:", a)
@@ -612,10 +617,12 @@ def convert(src, dst):
 def main(argv=None):
     """CLI: notein2pdf INPUT.in OUTPUT.pdf"""
     argv = sys.argv[1:] if argv is None else argv
+    embed = "--no-embed" not in argv
+    argv = [a for a in argv if a != "--no-embed"]
     if len(argv) != 2:
         print(__doc__)
         return 2
-    n = convert(argv[0], argv[1])
+    n = convert(argv[0], argv[1], embed_source=embed)
     print(f"wrote {argv[1]} ({n} pages)")
     for w in sorted(set(warnings)):
         print("warning:", w, f"(x{warnings.count(w)})")

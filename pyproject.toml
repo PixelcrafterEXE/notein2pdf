@@ -16,9 +16,14 @@ dev = ["pytest>=8", "numpy", "pillow"]
 [project.scripts]
 notein2pdf = "notein2pdf.converter:main"
 notein2pdf-batch = "notein2pdf.batch:cli"
+pdf2notein = "notein2pdf.back:main"
+notein2pdf-sync = "notein2pdf.sync_service:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+notein2pdf = ["data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

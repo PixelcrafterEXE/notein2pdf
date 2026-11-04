@@ -1,42 +1,22 @@
 """Convert a folder of Notein exports (.in, or the extensionless zips Notein syncs to Drive) into PDFs.
 
-usage: notein2pdf-batch SRC_DIR OUT_DIR [--force] [--include-trash] [--shard=I/N]
+usage: notein2pdf-batch SRC_DIR OUT_DIR [--force] [--include-trash] [--shard=I/N] [--no-embed]
 
 * Every file that is a zip containing note_meta.json is treated as a note (extension doesn't matter).
 * Output: OUT_DIR/<folder path from parentId>/<title>.pdf  (+ '<title> - <recording>.mp3' for embedded audio). Name clashes get a short id suffix.
 * State is kept in OUT_DIR/.notein_state.json (note id -> last modification time), so re-runs only touch changed notes.
 * Notes in Notein's trash are skipped unless --include-trash is given.
 """
-import json, os, re, sys, zipfile, traceback
+import json, os, sys, zipfile, traceback
 from . import converter
+from .notein_tree import read_meta, read_folder, safe, folder_path as _folder_path
 
 def zlib_crc(s):
     import zlib
     return zlib.crc32(s.encode())
 
-def read_meta(path):
-    try:
-        with zipfile.ZipFile(path) as z:
-            return json.loads(z.read("note_meta.json"))
-    except Exception:
-        return None
-
-def read_folder(path):
-    """Folder records are zips holding a 'folder_<title>' JSON (id, title, parentId)."""
-    try:
-        with zipfile.ZipFile(path) as z:
-            for n in z.namelist():
-                if n.startswith("folder_") and n not in ("folder_labels.json",) and not n.startswith("folder_tn_"):
-                    return json.loads(z.read(n))
-    except Exception:
-        return None
-    return None
-
-def safe(name):
-    return re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", name).strip(" .") or "untitled"
-
 def main(argv):
-    force = "--force" in argv; trash = "--include-trash" in argv
+    no_embed = "--no-embed" in argv; force = "--force" in argv; trash = "--include-trash" in argv
     shard = next((a.split("=")[1] for a in argv if a.startswith("--shard=")), None)   # e.g. --shard=0/2
     si, sn = (int(x) for x in shard.split("/")) if shard else (0, 1)
     args = [a for a in argv if not a.startswith("--")]
@@ -55,10 +35,7 @@ def main(argv):
             if f and f.get("id"):
                 folders[f["id"]] = f
     def folder_path(pid):
-        parts, seen = [], set()
-        while pid and pid in folders and pid not in seen:
-            seen.add(pid); parts.append(safe(folders[pid].get("title") or pid[:6])); pid = folders[pid].get("parentId")
-        return os.path.join(*reversed(parts)) if parts else ""
+        return _folder_path(folders, pid)
     # pass 2: read every note's meta once; find names that would clash (so all shards agree on file names)
     metas = {}
     for root, _, files in os.walk(src):
@@ -93,7 +70,7 @@ def main(argv):
                 skipped += 1; continue
             try:
                 converter.warnings.clear()
-                n = converter.convert(path, target)
+                n = converter.convert(path, target, embed_source=not no_embed)
                 state[nid] = {"mod": mod, "pdf": target, "title": title}
                 json.dump(state, open(sp, "w"), indent=1)
                 print("ok   %-60s %3d pages" % (title[:60], n), flush=True); done += 1

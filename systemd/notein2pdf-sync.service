@@ -1,0 +1,15 @@
+[Unit]
+Description=notein2pdf: one-way sync of Notein notes (via Google Drive) to Nextcloud
+# Started by notein2pdf-sync.timer; can also be run manually: systemctl --user start notein2pdf-sync.service
+
+[Service]
+Type=oneshot
+# Adjust this path if the virtualenv lives somewhere else.
+ExecStart=%h/Projects/Notein/.venv/bin/notein2pdf-sync --once
+# Config defaults to ~/.config/notein2pdf/sync.json (create with: notein2pdf-sync --init)
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+[Install]
+WantedBy=default.target

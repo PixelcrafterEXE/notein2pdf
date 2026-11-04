@@ -1,0 +1,16 @@
+[Unit]
+Description=Run notein2pdf-sync periodically
+
+[Timer]
+# First run shortly after login/boot, then every 60s. Match this to the "poll_seconds" in
+# ~/.config/notein2pdf/sync.json if you change it - the timer's interval is what actually
+# controls the cadence when running via --once (the recommended, systemd-idiomatic way);
+# "poll_seconds" only matters if you instead run `notein2pdf-sync` without --once as a
+# long-lived loop (not what this timer does).
+OnStartupSec=30
+OnUnitActiveSec=60
+AccuracySec=5
+Persistent=true
+
+[Install]
+WantedBy=timers.target

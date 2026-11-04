@@ -180,6 +180,16 @@ def fetch_drive_properties(config):
     return props
 
 
+def save_state(path, state):
+    """Atomic write (temp file + rename): a crash or a concurrent reader never sees a truncated state file."""
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(state, f, indent=1)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 def run_cycle(config, dry_run=False, progress=None):
     """progress(done, total, text): optional callback, called before each action (used for live notifications)."""
     os.makedirs(config["cache_dir"], exist_ok=True)
@@ -258,7 +268,7 @@ def run_cycle(config, dry_run=False, progress=None):
             report["failed"] += 1
             print(f"FAIL  note {nid}\n{traceback.format_exc(limit=2)}", flush=True)
         if not dry_run:
-            json.dump(state, open(config["state_file"], "w"), indent=1)
+            save_state(config["state_file"], state)
 
     if report["vanished"]:
         print(f"warning: {len(report['vanished'])} previously-synced note(s) missing from this cycle's Drive "

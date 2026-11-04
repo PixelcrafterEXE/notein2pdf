@@ -165,3 +165,24 @@ def test_duplicate_files_for_one_note_id_newest_wins():
     old["lastModificationTime"], new["lastModificationTime"] = 1, 2
     plan = plan_cycle({"/old": old, "/new": new}, folders_tree(), {}, MAPPINGS)
     assert len(plan) == 1 and plan[0][2]["meta"]["title"] == "GÜ1"
+
+
+def test_unbounded_dot_paper_style_is_rendered_without_warning():
+    import json
+    import fitz
+    from notein2pdf import converter
+    theme = json.dumps({"baseTheme": {"color": -15461356},
+                        "paperStyle": {"type": "x.UnboundedDotPaperStyle", "requiredItemSpace": 37.5}})
+    doc = fitz.open(); page = doc.new_page(width=300, height=300)
+    converter.warnings.clear()
+    converter.paper_background(page, theme, 0.24, 1920, 1920)
+    assert converter.warnings == []
+    assert len(page.get_drawings()) > 1  # background + dots
+
+
+def test_save_state_is_atomic_and_roundtrips(tmp_path):
+    import json
+    from notein2pdf.sync_service import save_state
+    p = str(tmp_path / "s.json")
+    save_state(p, {"a": {"mod": 1}}); save_state(p, {"a": {"mod": 2}})
+    assert json.load(open(p)) == {"a": {"mod": 2}} and not (tmp_path / "s.json.tmp").exists()

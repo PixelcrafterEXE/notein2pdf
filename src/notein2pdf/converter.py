@@ -8,11 +8,14 @@ The .in file is a zip holding an SQLite (Room) database, the original PDF (for
 annotated PDFs), images and JSON metadata. Strokes are drawn as vectors on top
 of the original PDF page or a generated paper background.
 """
-import json, os, shutil, sqlite3, sys, tempfile, zipfile
+import json
+import math, os, shutil, sqlite3, sys, tempfile, zipfile
 import pymupdf as fitz
 
 from . import provenance
 
+UNBOUNDED_MARGIN = 100         # px around the ink on infinite-canvas pages (measured on the app's own export)
+UNBOUNDED_MAX_AREA = 3 * 1024 * 1024   # pt^2 cap on infinite-canvas pages (app scales larger ones down)
 PX_TO_PT = 72 / 150          # Notein pages are 1240 px wide = A4 at 150 dpi
 warnings = []
 _OC = None          # xref of the PDF layer (optional content group) currently drawn into
@@ -57,13 +60,27 @@ def paper_background(page, theme, scale, pw, ph):
     if kind == "UnboundedSquarePaperStyle":
         step = ps.get("requiredItemSpace", 37.5)
         sh = page.new_shape()
-        x = 0.0
+        x = _OX % step           # lattice is anchored at the canvas origin, which sits at (_OX, _OY) on the page
         while x < pw:
             sh.draw_line((x * scale, 0), (x * scale, ph * scale)); x += step
-        y = 0.0
+        y = _OY % step
         while y < ph:
             sh.draw_line((0, y * scale), (pw * scale, y * scale)); y += step
         sh.finish(oc=_OC, color=(0.36, 0.36, 0.36) if _DARK else (0.75, 0.75, 0.75), width=0.45)
+        sh.commit()
+        return
+    if kind == "UnboundedDotPaperStyle":
+        # same lattice as UnboundedSquarePaperStyle (requiredItemSpace), with a dot at each intersection
+        step = ps.get("requiredItemSpace", 37.5)
+        sh = page.new_shape()
+        y = _OY % step
+        while y < ph:
+            x = _OX % step
+            while x < pw:
+                sh.draw_circle((x * scale, y * scale), 0.62)
+                x += step
+            y += step
+        sh.finish(oc=_OC, color=None, fill=(0.45, 0.45, 0.45) if _DARK else (0.80, 0.78, 0.74))
         sh.commit()
         return
     if kind in ("NewDotPaperStyle", "DotPaperStyle"):
@@ -536,12 +553,13 @@ def convert(src, dst, embed_source=True):
                 _OX = _OY = 0.0
                 if pg["unbounded"]:
                     b = content_bounds(con, pid, set(), set(layer_order))
-                    m = 60
+                    m = UNBOUNDED_MARGIN
                     if b:
                         _OX, _OY = m - b[0], m - b[1]
                         pw, ph = b[2] - b[0] + 2 * m, b[3] - b[1] + 2 * m
-                page = out.new_page(width=pw * PX_TO_PT, height=ph * PX_TO_PT)
-                scale = PX_TO_PT
+                # the app shrinks big infinite-canvas exports so the page area stays <= 3 Mi pt^2
+                scale = min(PX_TO_PT, math.sqrt(UNBOUNDED_MAX_AREA / (pw * ph)))
+                page = out.new_page(width=pw * scale, height=ph * scale)
                 _OC = get_oc("paper_theme")
                 paper_background(page, theme, scale, pw, ph)
                 _OC = None

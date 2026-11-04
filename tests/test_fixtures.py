@@ -44,3 +44,20 @@ def test_infinite_canvas_note_converts_with_layers_audio_and_annotation(tmp_path
     assert len(doc.get_ocgs()) >= 3
     assert len(list(doc[0].annots())) == 1                   # the sticky-note annotation
     assert len(list(tmp_path.glob("*.mp3"))) == 2            # both embedded recordings
+
+
+def test_infinite_canvas_page_size_and_grid_match_app_export(tmp_path):
+    """Margin 100, area-capped scale and a canvas-origin-anchored lattice, measured on the app's own export."""
+    note, app = str(FIX / "export_test" / "note.in"), str(FIX / "export_test" / "app.pdf")
+    if not (Path(note).exists() and Path(app).exists()):
+        pytest.skip("export_test fixture not present")
+    out = str(tmp_path / "o.pdf")
+    conv.convert(note, out)
+    mine, ref = pymupdf.open(out)[0], pymupdf.open(app)[0]
+    assert abs(mine.rect.width - ref.rect.width) < 2 and abs(mine.rect.height - ref.rect.height) < 2
+
+    def vlines(pg):
+        return sorted({round(it[1].x, 2) for dr in pg.get_drawings() for it in dr["items"]
+                       if it[0] == "l" and abs(it[1].x - it[2].x) < 0.01 and abs(it[1].y - it[2].y) > 50})
+    a, m = vlines(ref), vlines(mine)
+    assert abs(a[0] - m[0]) < 0.5 and abs((a[1] - a[0]) - (m[1] - m[0])) < 0.05

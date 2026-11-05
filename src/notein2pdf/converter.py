@@ -70,18 +70,26 @@ def paper_background(page, theme, scale, pw, ph):
         sh.commit()
         return
     if kind == "UnboundedDotPaperStyle":
-        # same lattice as UnboundedSquarePaperStyle (requiredItemSpace), with a dot at each intersection
+        # same lattice as UnboundedSquarePaperStyle (requiredItemSpace), with a dot at each intersection.
+        # Tens of thousands of dots would bloat the page's content stream, and pymupdf rescans that whole stream on
+        # every later shape commit (quadratic on ink-heavy pages), so draw them on a scratch page and place that as
+        # one form XObject.
         step = ps.get("requiredItemSpace", 37.5)
-        sh = page.new_shape()
+        tmp = fitz.open()
+        tp = tmp.new_page(width=page.rect.width, height=page.rect.height)
+        sh = tp.new_shape()
         y = _OY % step
         while y < ph:
             x = _OX % step
             while x < pw:
-                sh.draw_circle((x * scale, y * scale), 0.62)
+                # a zero-length line with round caps is a dot; far cheaper than draw_circle
+                sh.draw_line((x * scale, y * scale), (x * scale + 0.01, y * scale))
                 x += step
             y += step
-        sh.finish(oc=_OC, color=None, fill=(0.45, 0.45, 0.45) if _DARK else (0.80, 0.78, 0.74))
+        sh.finish(color=(0.45, 0.45, 0.45) if _DARK else (0.80, 0.78, 0.74), width=1.24, lineCap=1)
         sh.commit()
+        page.show_pdf_page(page.rect, tmp, 0, oc=_OC or 0)
+        tmp.close()
         return
     if kind in ("NewDotPaperStyle", "DotPaperStyle"):
         l, r_ = ps.get("leftPadding", 34.5), ps.get("rightPadding", 34.5)
@@ -201,6 +209,29 @@ def _multiply_gs(page):
 HIGHLIGHT_OPACITY = 1.0
 
 
+_BATCH = {"page": None, "sh": None, "n": 0}
+_BATCH_MAX = 400
+
+
+def flush_strokes():
+    """Commit the shared stroke Shape. Every Shape.commit() makes pymupdf rescan the page's whole content stream, so
+    committing once per stroke is quadratic (minutes for a page with thousands of strokes). Plain pen strokes are
+    therefore collected into one Shape and committed here, before anything that has to stay ordered relative to them
+    (images, text, shapes, highlighters) and at the end of the page."""
+    sh = _BATCH["sh"]
+    _BATCH.update(page=None, sh=None, n=0)
+    if sh is not None:
+        sh.commit()
+
+
+def _stroke_shape(page):
+    if _BATCH["page"] is not page or _BATCH["n"] >= _BATCH_MAX:
+        flush_strokes()
+        _BATCH.update(page=page, sh=page.new_shape(), n=0)
+    _BATCH["n"] += 1
+    return _BATCH["sh"]
+
+
 def draw_stroke(page, s, scale):
     pts = s["points"]
     if not pts:
@@ -210,12 +241,12 @@ def draw_stroke(page, s, scale):
     rgb = _adapt(rgb, kind)
     width = max(s["width"] * scale * (1.0 if kind in (2, 100) else PEN_WIDTH_FACTOR), 0.2)
     if kind == 100:                                          # pencil: smooth translucent line
-        sh = page.new_shape()
+        sh = _stroke_shape(page)
         add_smooth(sh, [((p["x"] + _OX) * scale, (p["y"] + _OY) * scale) for p in pts])
         sh.finish(oc=_OC, color=rgb, width=width, stroke_opacity=PENCIL_OPACITY, closePath=False, lineCap=1, lineJoin=1)
-        sh.commit()
         return
-    if kind == 2:  # highlighter
+    if kind == 2:  # highlighter (own blend state: keep it out of the batch, but keep order)
+        flush_strokes()
         sh = page.new_shape()
         add_smooth(sh, [((p["x"] + _OX) * scale, (p["y"] + _OY) * scale) for p in pts])
         sh.finish(oc=_OC, color=rgb, width=width, stroke_opacity=(0.5 if _DARK else HIGHLIGHT_OPACITY), closePath=False,
@@ -226,16 +257,15 @@ def draw_stroke(page, s, scale):
         sh.commit()
         return
     if len(pts) == 1 or all(p["x"] == pts[0]["x"] and p["y"] == pts[0]["y"] for p in pts):
-        sh = page.new_shape()
+        sh = _stroke_shape(page)
         r = max(width * (0.5 + pts[0].get("p", 0.5)) / 2, 0.15)
         sh.draw_circle(((pts[0]["x"] + _OX) * scale, (pts[0]["y"] + _OY) * scale), r)
         sh.finish(oc=_OC, color=None, fill=rgb)
-        sh.commit()
         return
     # pressure-sensitive: group consecutive segments with the same quantised width
     def wq(p):
         return round(width * (PRESSURE_MIN + PRESSURE_GAIN * min(max(p, 0), 1)), 2)
-    sh = page.new_shape()
+    sh = _stroke_shape(page)
     run, cur = [], None
     for i, p in enumerate(pts):
         w = wq(p.get("p", 0.5))
@@ -250,7 +280,6 @@ def draw_stroke(page, s, scale):
     if len(run) > 1:
         add_smooth(sh, run)
         sh.finish(oc=_OC, color=rgb, width=cur, closePath=False, lineCap=1, lineJoin=1)
-    sh.commit()
 
 
 def draw_shape(page, row, scale):
@@ -577,7 +606,10 @@ def convert(src, dst, embed_source=True):
                         continue
                     items.append((rank.get(r["layer_id"], default_rank), r["creation_time"] or 0, kind, r))
             items.sort(key=lambda t: (t[0], t[1]))
+            flush_strokes()
             for _, _, kind, r in items:
+                if kind != "stroke":
+                    flush_strokes()
                 _OC = get_oc(r["layer_id"])
                 try:
                     if kind == "image":
@@ -618,6 +650,7 @@ def convert(src, dst, embed_source=True):
                         draw_table(page, r, scale)
                 except Exception as e:
                     warnings.append("item skipped (%s): %s" % (kind, e))
+            flush_strokes()
             _OC = None
             add_page_annotations(con, page, pid, scale)
         add_outline(con, out, page_ids)

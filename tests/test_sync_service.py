@@ -177,7 +177,9 @@ def test_unbounded_dot_paper_style_is_rendered_without_warning():
     converter.warnings.clear()
     converter.paper_background(page, theme, 0.24, 1920, 1920)
     assert converter.warnings == []
-    assert len(page.get_drawings()) > 1  # background + dots
+    # dots are lighter than the dark paper: the rendered page must contain more than one colour
+    pix = page.get_pixmap(dpi=144)
+    assert len({pix.pixel(x, y) for x in range(0, pix.width, 3) for y in range(0, pix.height, 3)}) > 1
 
 
 def test_save_state_is_atomic_and_roundtrips(tmp_path):
